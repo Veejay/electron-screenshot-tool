@@ -1,36 +1,10 @@
 const electron = require('electron')
 const fs = require('fs')
-const Q = require('q')
-// Module to control application life.
 const app = electron.app
-// Module to create native browser window.
 const BrowserWindow = electron.BrowserWindow
 
 const URL = 'https://www.mailchimp.com'
 const dimensions = { width: 2560, height: 1600 }
-
-// Should go into a separate module
-const Pinky = {
-  readFile: (path) => {
-    return Q.promise((resolve, reject) => {
-      fs.readFile(path, 'utf-8', (error, contents) => {
-        if (error) {
-          reject(error)
-        } else {
-          resolve(contents)
-        }
-      })
-    })
-  }
-}
-
-const waitFor = (timeout) => {
-  return Q.promise((resolve, reject) => {
-    setTimeout(() => {
-      resolve()
-    }, timeout)
-  })
-}
 
 class NativeImageEncoder {
   constructor (nativeImage) {
@@ -48,31 +22,27 @@ class NativeImageEncoder {
 }
 
 const takeScreenshot = (contents, { stylesPath, outputFile, dimensions }) => {
-  console.log('Page has finished loading')
-  Pinky.readFile(stylesPath).then(cssDeclarations => {
-    console.log('CSS declarations', cssDeclarations)
-    contents.insertCSS(cssDeclarations)
-    // Take the screenshot and write it to a file
-    const rect = Object.assign(dimensions, { x: 0, y: 0 })
-    // Maybe the injected CSS needs time, the result is not accurate without it
-    waitFor(3000).then(() => {
-      contents.capturePage(rect, (nativeImage) => {
-        // See above, the NativeImageEncoder#encode (format: [jpg|png], [quality: (0..100)]) => Buffer
-        const buffer = new NativeImageEncoder(nativeImage).encode({format: 'jpg'})
-        fs.writeFile(outputFile, buffer)
-        console.log('Wrote file, exiting')
-        app.quit()
-      })
-    })
-    console.log('Waiting for the elements to be ready for the screenshot')
-  }).catch(error => {
-    console.log(error)
+  const rect = Object.assign(dimensions, { x: 0, y: 0 })
+  contents.capturePage(rect, (nativeImage) => {
+    const buffer = new NativeImageEncoder(nativeImage).encode({ format: 'jpg' })
+    fs.writeFile(`./screenshots/${outputFile}`, buffer)
+    console.log('Wrote file, exiting')
+    app.quit()
   })
 }
 
 app.on('ready', () => {
+  const localScreen = electron.screen
+  const display = localScreen.getPrimaryDisplay().workAreaSize
   // Create a new window. Don't show it though, we're only using it to create the screenshot
-  const windowOptions = Object.assign(dimensions, { show: false })
+  const windowOptions = Object.assign(dimensions, {
+    x: display.width,
+    y: display.height,
+    resizable: false,
+    'skip-taskbar': true,
+    show: false,
+    'enable-larger-than-screen': true
+  })
   let screenshotWindow = new BrowserWindow(windowOptions)
   // We wait for the window to finish loading
   const contents = screenshotWindow.webContents
